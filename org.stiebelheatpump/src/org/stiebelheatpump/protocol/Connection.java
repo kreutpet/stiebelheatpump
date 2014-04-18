@@ -54,7 +54,7 @@ public class Connection {
 	private static final int SLEEP_INTERVAL = 100;
 
 	/**
-	 * Creates a Connection object. You must call <code>open()</code> before calling <code>read()</code> in order to
+	 * Creates a Connection object. You must call <code>connect()</code> before calling <code>read()</code> in order to
 	 * read data. The timeout is set by default to 5s.
 	 * 
 	 * @param serialPort
@@ -69,7 +69,7 @@ public class Connection {
 	}
 	
 	/**
-	 * Creates a Connection object. You must call <code>open()</code> before calling <code>read()</code> in order to
+	 * Creates a Connection object. You must call <code>connect()</code> before calling <code>read()</code> in order to
 	 * read data. The timeout is set by default to 5s.
 	 * 
 	 * @param serialPort
@@ -174,11 +174,10 @@ public class Connection {
 	}
 
 	/**
-	 * Requests a data message from the remote device using IEC 62056-21 Mode C. The data message received is parsed and
-	 * a list of data sets is returned.
+	 * Requests the firmware version from the stiebel heat pump using serial connection.
 	 * 
-	 * @return A list of data sets contained in the data message response from the remote device. The first data set
-	 *         will contain the "identification" of the meter as the id and empty strings for value and unit.
+	 * @return A version string.
+	 * 
 	 * @throws IOException
 	 *             if any kind of error other than timeout occurs while trying to read the remote device. Note that the
 	 *             connection is not closed when an IOException is thrown.
@@ -305,7 +304,7 @@ public class Connection {
 	}
 	
 	/**
-	 * Sets the serial port parameters to 57600bps-8N1
+	 * Sets the serial port parameters to xxxxbps-8N1
 	 * 
 	 * @param baudrate
 	 *            used to initialize the serial connection
