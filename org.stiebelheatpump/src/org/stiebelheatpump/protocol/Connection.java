@@ -346,7 +346,7 @@ public class Connection {
 	}
 	
 	/**
-	 * Sets the serial port parameters to 57600bps-8N1
+	 * Sets the serial port parameters to xxxxbps-8N1
 	 * 
 	 * @param baudrate
 	 *            used to initialize the serial connection
