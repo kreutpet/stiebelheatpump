@@ -35,7 +35,7 @@ public class Connection {
 	private DataInputStream is;
 
 	private static final int INPUT_BUFFER_LENGTH = 1024;
-	private final byte[] buffer = new byte[INPUT_BUFFER_LENGTH];
+	private byte[] buffer = new byte[INPUT_BUFFER_LENGTH];
 
 	public static byte ESCAPE = (byte) 0x10;
 	public static byte HEADERSTART = (byte) 0x01;
@@ -47,14 +47,14 @@ public class Connection {
 	public static byte[] DATAAVAILABLE = { ESCAPE, STARTCOMMUNICATION };
 	public static byte VERSIONREQUEST = (byte) 0xfd;
 	public static byte VERSIONCHECKSUM = (byte) 0xfe;
-	public static byte[] REQUESTMESSAGE = { HEADERSTART,GET,VERSIONREQUEST,VERSIONCHECKSUM,ESCAPE,END };
+	public static byte[] REQUESTMESSAGE = { HEADERSTART,GET,VERSIONCHECKSUM,VERSIONREQUEST,ESCAPE,END };
 	
 	private static final Charset charset = Charset.forName("US-ASCII");
 
 	private static final int SLEEP_INTERVAL = 100;
 
 	/**
-	 * Creates a Connection object. You must call <code>open()</code> before calling <code>read()</code> in order to
+	 * Creates a Connection object. You must call <code>connect()</code> before calling <code>read()</code> in order to
 	 * read data. The timeout is set by default to 5s.
 	 * 
 	 * @param serialPort
@@ -69,7 +69,7 @@ public class Connection {
 	}
 	
 	/**
-	 * Creates a Connection object. You must call <code>open()</code> before calling <code>read()</code> in order to
+	 * Creates a Connection object. You must call <code>connect()</code> before calling <code>read()</code> in order to
 	 * read data. The timeout is set by default to 5s.
 	 * 
 	 * @param serialPort
@@ -148,7 +148,6 @@ public class Connection {
 			serialPort = null;
 			throw new IOException("Error getting input or output or input stream from serial port", e);
 		}
-
 	}
 
 	/**
@@ -174,11 +173,10 @@ public class Connection {
 	}
 
 	/**
-	 * Requests a data message from the remote device using IEC 62056-21 Mode C. The data message received is parsed and
-	 * a list of data sets is returned.
+	 * Requests the firmware version from the stiebel heat pump using serial connection.
 	 * 
-	 * @return A list of data sets contained in the data message response from the remote device. The first data set
-	 *         will contain the "identification" of the meter as the id and empty strings for value and unit.
+	 * @return A version string.
+	 * 
 	 * @throws IOException
 	 *             if any kind of error other than timeout occurs while trying to read the remote device. Note that the
 	 *             connection is not closed when an IOException is thrown.
@@ -191,8 +189,9 @@ public class Connection {
 			throw new IllegalStateException("Connection is not open.");
 		}
 
-		boolean readSuccessful;
-		readSuccessful = startCommunication();
+		if(!startCommunication()){
+			return "No version";
+		}
 		
 		short myNumber = getVersionInfo();
 
@@ -200,16 +199,17 @@ public class Connection {
 	}
 
 	private short getVersionInfo() throws IOException {
-		boolean readSuccessful;
-		int numBytesReadTotal;
-		// finally send version request
-		os.write(REQUESTMESSAGE);
+		// send version request
+		for (byte abyte : REQUESTMESSAGE){
+			os.write(abyte);
+		}		
 		os.flush();		
-
-		readSuccessful = false;
-		numBytesReadTotal = 0;
+		
+		boolean readSuccessful = false;
+		int numBytesReadTotal = 0;
 		int timeval = 0;
 		
+		// receive data are available "0x10 0x02"
 		while (timeout == 0 || timeval < timeout) {
 			if (is.available() > 0) {
 				int numBytesRead = is.read(buffer, numBytesReadTotal, INPUT_BUFFER_LENGTH - numBytesReadTotal);
@@ -219,7 +219,7 @@ public class Connection {
 					timeval = 0;
 				}
 
-				if (numBytesReadTotal > 4 && buffer[numBytesReadTotal-1] == 0x03) {
+				if (numBytesReadTotal > 1 && buffer[numBytesReadTotal-1] == STARTCOMMUNICATION) {
 					readSuccessful = true;
 					break;
 				}
@@ -234,14 +234,55 @@ public class Connection {
 		}
 
 		if (!readSuccessful) {
-			throw new IOException("Timeout while listening for Data Message !");
+			throw new IOException("Did not receive any data available message !");
+		}
+		
+		if (numBytesReadTotal != 2) {
+			throw new IOException("Data available message does not have length of 2!");
+		}
+		
+		// send acknowledgment 
+		os.write(ESCAPE);
+		os.flush();
+		
+		readSuccessful = false;
+		numBytesReadTotal = 0;
+		timeval = 0;
+		buffer = new byte[INPUT_BUFFER_LENGTH];
+		// receive version information
+		while (timeout == 0 || timeval < timeout) {
+			if (is.available() > 0) {
+				int numBytesRead = is.read(buffer, numBytesReadTotal, INPUT_BUFFER_LENGTH - numBytesReadTotal);
+				numBytesReadTotal += numBytesRead;
+
+				if (numBytesRead > 0) {
+					timeval = 0;
+				}
+
+				if (numBytesReadTotal == 8 && buffer[numBytesReadTotal-1] == END) {
+					readSuccessful = true;
+					break;
+				}
+			}
+
+			try {
+				Thread.sleep(SLEEP_INTERVAL);
+			} catch (InterruptedException e) {
+			}
+
+			timeval += SLEEP_INTERVAL;
+		}
+
+		if (!readSuccessful) {
+			throw new IOException("Did not receive version info !");
 		}
 		
 		if (numBytesReadTotal != 8) {
-			throw new IOException("Data message does not have length of 8!");
+			throw new IOException("Data available message does not have length of 8!");
 		}
 		
-		if (buffer[numBytesReadTotal - 1] != 0x03 && buffer[numBytesReadTotal - 2] != 0x10) {
+		
+		if (buffer[numBytesReadTotal - 1] != END && buffer[numBytesReadTotal - 2] != ESCAPE) {
 			throw new IOException("Data message does not have footer!");
 		}
 
