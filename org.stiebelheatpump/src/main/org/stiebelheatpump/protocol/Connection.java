@@ -18,9 +18,17 @@ import gnu.io.UnsupportedCommOperationException;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.Charset;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
+
+import org.stiebelheatpump.internal.StiebelHeatPumpException;
 
 public class Connection {
 
@@ -31,9 +39,13 @@ public class Connection {
 	
 	private int timeout = 5000;
 
-	private DataOutputStream os;
-	private DataInputStream is;
+	//private DataOutputStream os;
+	//private DataInputStream is;
 
+	private OutputStream os;
+	private InputStream is;
+    ByteStreamPipe byteStreamPipe = null;
+	
 	private static final int INPUT_BUFFER_LENGTH = 1024;
 	private byte[] buffer = new byte[INPUT_BUFFER_LENGTH];
 
@@ -45,9 +57,13 @@ public class Connection {
 	public static byte STARTCOMMUNICATION = (byte) 0x02;
 	public static byte[] FOOTER = { ESCAPE, END };
 	public static byte[] DATAAVAILABLE = { ESCAPE, STARTCOMMUNICATION };
+	
 	public static byte VERSIONREQUEST = (byte) 0xfd;
 	public static byte VERSIONCHECKSUM = (byte) 0xfe;
-	public static byte[] REQUESTMESSAGE = { HEADERSTART,GET,VERSIONCHECKSUM,VERSIONREQUEST,ESCAPE,END };
+	public static byte[] REQUESTVERSION = { HEADERSTART,GET,VERSIONCHECKSUM,VERSIONREQUEST,ESCAPE,END };
+	public static byte VALUECHECKSUM = (byte) 0xfc;
+	public static byte VALUEREQUEST = (byte) 0xfb;
+	public static byte[] REQUESTVALUES = { HEADERSTART,GET,VALUECHECKSUM,VALUEREQUEST,ESCAPE,END };
 	
 	private static final Charset charset = Charset.forName("US-ASCII");
 
@@ -136,12 +152,14 @@ public class Connection {
 			throw new IOException("The specified CommPort is not a serial port");
 		}
 
-		serialPort = (SerialPort) commPort;
+		serialPort = (RXTXPort) commPort;
 		// Set the parameters of the connection.
 		setSerialPortParameters(baudRate);
 
 		try {
+			//os  = serialPort.getOutputStream();
 			os = new DataOutputStream(serialPort.getOutputStream());
+			//is = serialPort.getInputStream();
 			is = new DataInputStream(serialPort.getInputStream());
 		} catch (IOException e) {
 			serialPort.close();
@@ -190,7 +208,7 @@ public class Connection {
 		}
 
 		if(!startCommunication()){
-			return "No version";
+			return "No Communication";
 		}
 		
 		short myNumber = getVersionInfo();
@@ -198,9 +216,29 @@ public class Connection {
 		return String.valueOf(myNumber);
 	}
 
+	/**
+	 * Requests the data from the stiebel heat pump using serial connection.
+	 * 
+	 * @return map of values
+	 * 
+	 * @throws IOException
+	 *             if any kind of error other than timeout occurs while trying to read the remote device. Note that the
+	 *             connection is not closed when an IOException is thrown.
+	 * @throws TimeoutException
+	 *             if no response at all (not even a single byte) was received from the meter within the timeout span.
+	 */
+	public Map<String, String> readCurrentValues(Request request) throws IOException, TimeoutException {
+
+		if (serialPort == null) {
+			throw new IllegalStateException("Connection is not open.");
+		}
+		
+		return getDataByRequest(request);
+	}
+	
 	private short getVersionInfo() throws IOException {
 		// send version request
-		for (byte abyte : REQUESTMESSAGE){
+		for (byte abyte : REQUESTVERSION){
 			os.write(abyte);
 		}		
 		os.flush();		
@@ -291,7 +329,123 @@ public class Connection {
 		return myNumber;
 	}
 
-	private boolean startCommunication() throws IOException, TimeoutException {
+	private Map<String, String> getDataByRequest(Request request) throws IOException {
+		
+		short checkSum = calculateChecksum(
+				new byte[] { request.getRequestByte()});
+		byte[] requestMessage = { 
+				HEADERSTART,GET, 
+				shortToByte(checkSum)[0], request.getRequestByte(),
+				ESCAPE,	END };
+		
+		// send version request
+		for (byte abyte : requestMessage){
+			os.write(abyte);
+		}
+		try {
+			Thread.sleep(SLEEP_INTERVAL);
+		} catch (InterruptedException e) {
+		}
+		os.flush();		
+		
+		boolean readSuccessful = false;
+		int numBytesReadTotal = 0;
+		int timeval = 0;
+		
+		// receive data are available "0x10 0x02"
+		while (timeout == 0 || timeval < timeout) {
+			if (is.available() > 0) {
+				int numBytesRead = is.read(buffer, numBytesReadTotal, INPUT_BUFFER_LENGTH - numBytesReadTotal);
+				numBytesReadTotal += numBytesRead;
+
+				if (numBytesRead > 0) {
+					timeval = 0;
+				}
+
+				if (numBytesReadTotal > 1 && buffer[numBytesReadTotal-1] == STARTCOMMUNICATION) {
+					readSuccessful = true;
+					break;
+				}
+			}
+
+			try {
+				Thread.sleep(SLEEP_INTERVAL);
+			} catch (InterruptedException e) {
+			}
+
+			timeval += SLEEP_INTERVAL;
+		}
+
+		if (!readSuccessful) {
+			throw new IOException("Did not receive any data available message !");
+		}
+		
+		if (numBytesReadTotal != 2) {
+			throw new IOException("Data available message does not have length of 2!");
+		}
+		
+		// send acknowledgment 
+		os.write(ESCAPE);
+		os.flush();
+		
+		readSuccessful = false;
+		numBytesReadTotal = 0;
+		timeval = 0;
+		buffer = new byte[INPUT_BUFFER_LENGTH];
+		// receive version information
+		while (timeout == 0 || timeval < timeout) {
+			if (is.available() > 0) {
+				int numBytesRead = is.read(buffer, numBytesReadTotal, INPUT_BUFFER_LENGTH - numBytesReadTotal);
+				numBytesReadTotal += numBytesRead;
+
+				if (numBytesRead > 0) {
+					timeval = 0;
+				}
+
+				if (numBytesReadTotal == 8 && buffer[numBytesReadTotal-1] == END) {
+					readSuccessful = true;
+					break;
+				}
+			}
+
+			try {
+				Thread.sleep(SLEEP_INTERVAL);
+			} catch (InterruptedException e) {
+			}
+
+			timeval += SLEEP_INTERVAL;
+		}
+
+		if (!readSuccessful) {
+			throw new IOException("Did not receive version info !");
+		}
+		
+		if (numBytesReadTotal != 8) {
+			throw new IOException("Data available message does not have length of 8!");
+		}
+		
+		
+		if (buffer[numBytesReadTotal - 1] != END && buffer[numBytesReadTotal - 2] != ESCAPE) {
+			throw new IOException("Data message does not have footer!");
+		}
+
+		byte[] responseBuffer = new byte[numBytesReadTotal];
+		System.arraycopy(buffer, 0, responseBuffer, 0, numBytesReadTotal);
+		;
+		Map<String, String> data = new HashMap<String, String>();
+		// get data from heat pump
+		StiebelHeatPumpDataParser parser = new StiebelHeatPumpDataParser();
+		try {
+			data.putAll(parser.parseRecords(responseBuffer, request));
+		} catch (StiebelHeatPumpException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		return data;	
+	}
+		
+	public boolean startCommunication() throws IOException, TimeoutException {
 		
 		boolean readSuccessful;
 		int numBytesReadTotal;
@@ -363,4 +517,45 @@ public class Connection {
 					"Unsupported serial port parameter for serial port");
 		}
 	}
+
+	/**
+	 * calculates the checksum of a byte data array
+	 * 
+	 * @param data
+	 *            to calculate the checksum for
+	 * @param withReplace
+	 *            to set if the byte array shall be corrected by special replace
+	 *            method
+	 * @return calculated checksum as short
+	 */
+	private byte calculateChecksum(byte[] data) {
+		
+		byte[] dataWithoutHeaderFooter = data;
+		if (data.length>4){
+			dataWithoutHeaderFooter = Arrays.copyOfRange(data, 3,
+					data.length - 2);
+		}
+		
+		short checkSum = 1, i = 0;
+		for (i = 0; i < dataWithoutHeaderFooter.length; i++) {
+			checkSum += (short) (dataWithoutHeaderFooter[i] & 0xFF);
+		}
+
+		return shortToByte(checkSum)[0];
+	}
+	
+	/**
+	 * converts short to byte
+	 * 
+	 * @return array of bytes
+	 */
+	private byte[] shortToByte(short value) {
+		byte[] returnByteArray = new byte[2];
+		returnByteArray[0] = (byte) (value & 0xff);
+		returnByteArray[1] = (byte) ((value >> 8) & 0xff);
+
+		return returnByteArray;
+	}
+
+
 }
