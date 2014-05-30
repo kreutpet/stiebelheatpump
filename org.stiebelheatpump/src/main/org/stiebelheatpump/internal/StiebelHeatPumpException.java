@@ -16,8 +16,6 @@ package org.stiebelheatpump.internal;
  */
 public class StiebelHeatPumpException extends Exception {
 
-	private static final long serialVersionUID = 8030315127747955747L;
-
 	public StiebelHeatPumpException() {
 		super();
 	}

@@ -24,12 +24,16 @@ public class CircularByteBuffer {
 
     private boolean running = true;
 
+	private int retry = 5;
+
     public CircularByteBuffer(int size) {
         buffer = new byte[size];
     }
 
-    public byte get() {
-        waitForData();
+    public byte get() throws Exception {
+        if (!waitForData()){
+        	throw new Exception ("no data availabel!");
+        }
         byte result;
         synchronized (buffer) {
             result = buffer[readPos];
@@ -41,26 +45,35 @@ public class CircularByteBuffer {
         }
         return result;
     }
-
-    private void waitForData() {
-        while (isEmpty() && running) {
+    
+    private boolean waitForData() {
+    	int timeOut = 0;
+        while (isEmpty() && timeOut < retry  &&  running  ) {
             try {
                 Thread.sleep(WAIT_MS);
+                timeOut ++;
             } catch (Exception e) {
                 logger.error("Error while waiting for new data", e);
             }
         }
+        
+        if (timeOut == retry){
+        	return false;
+        }
+        return true;
     }
 
-    public short getShort() {
-        ByteBuffer bb = ByteBuffer.allocate(2);
+    public short getShort() throws Exception {
+        
+    	ByteBuffer bb = ByteBuffer.allocate(2);
         bb.order(ByteOrder.BIG_ENDIAN);
         bb.put(get());
         bb.put(get());
-        return bb.getShort(0);
+        return bb.getShort(0);       
     }
 
-    public void get(byte[] data) {
+    public void get(byte[] data) throws Exception {
+    	
         for (int i = 0; i < data.length; i++) {
             data[i] = get();
         }

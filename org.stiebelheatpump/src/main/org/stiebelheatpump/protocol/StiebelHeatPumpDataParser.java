@@ -32,6 +32,10 @@ public class StiebelHeatPumpDataParser {
 	public static byte[] FOOTER = { ESCAPE, END };
 	public static byte[] DATAAVAILABLE = { ESCAPE, STARTCOMMUNICATION };
 	
+	public static byte VERSIONREQUEST = (byte) 0xfd;
+	public static byte VERSIONCHECKSUM = (byte) 0xfe;
+	public static byte[] REQUESTVERSION = { HEADERSTART,GET,VERSIONCHECKSUM,VERSIONREQUEST,ESCAPE,END };
+	
 	final protected static char[] hexArray = "0123456789ABCDEF".toCharArray();
 	
 	public List<Request> parserConfiguration = new ArrayList<Request>();

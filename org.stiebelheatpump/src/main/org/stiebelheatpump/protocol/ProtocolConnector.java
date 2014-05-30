@@ -7,11 +7,11 @@ public interface ProtocolConnector {
         
 	void disconnect();
 
-    byte get();
+    byte get() throws Exception;
 
-    short getShort();
+    short getShort() throws Exception;
 
-    void get(byte[] data);
+    void get(byte[] data) throws Exception;
 
     void mark();
 

@@ -52,13 +52,12 @@ public class SerialConnector implements ProtocolConnector {
             byteStreamPipe = new ByteStreamPipe(in, buffer);
             new Thread(byteStreamPipe).start();
 
-            // Runtime.getRuntime().addShutdownHook(new Thread() {
-            //
-            // @Override
-            // public void run() {
-            // disconnect();
-            // }
-            // });
+            //Runtime.getRuntime().addShutdownHook(new Thread() {
+	        //    @Override
+	        //    public void run() {
+	        //    	disconnect();
+	        //    }
+            //});
 
         } catch (Exception e) {
             throw new RuntimeException("Could not init comm port", e);
@@ -79,25 +78,29 @@ public class SerialConnector implements ProtocolConnector {
             out.close();
             serialPort.close();
             buffer.stop();
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+			}
         } catch (IOException e) {
-            logger.warn("Could not fully shut down EnOcean driver", e);
+            logger.warn("Could not fully shut down heat pump driver", e);
         }
 
         logger.debug("Ready");
     }
 
     @Override
-    public byte get() {
+    public byte get() throws Exception {
         return buffer.get();
     }
 
     @Override
-    public short getShort() {
+    public short getShort() throws Exception {
         return buffer.getShort();
     }
 
     @Override
-    public void get(byte[] data) {
+    public void get(byte[] data) throws Exception {
         buffer.get(data);
     }
 
@@ -114,8 +117,12 @@ public class SerialConnector implements ProtocolConnector {
     @Override
     public void write(byte[] data) {
         try {
-            out.write(data);
+    		//for (byte abyte : data){
+        	//	out.write(abyte);
+    		//}
+    		out.write(data);
             out.flush();
+            logger.debug("Send request message : {}" , StiebelHeatPumpDataParser.bytesToHex(data));
         } catch (IOException e) {
             throw new RuntimeException("Could not write", e);
         }
@@ -124,13 +131,15 @@ public class SerialConnector implements ProtocolConnector {
     @Override
     public void write(byte data) {
         try {
+        	logger.debug("Sending byte message : {}" , data);
             out.write(data);
             out.flush();
         } catch (IOException e) {
             throw new RuntimeException("Could not write", e);
         }
     }
-    
+
+ 
 	/**
 	 * Sets the serial port parameters to xxxxbps-8N1
 	 * 

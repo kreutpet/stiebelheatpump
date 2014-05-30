@@ -22,10 +22,10 @@ import javax.xml.bind.DatatypeConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.stiebelheatpump.internal.ConfigLocator;
-
-import org.stiebelheatpump.protocol.Connection;
+import org.stiebelheatpump.internal.StiebelHeatPumpException;
 import org.stiebelheatpump.protocol.Request;
 import org.stiebelheatpump.protocol.SerialConnector;
+import org.stiebelheatpump.protocol.StiebelHeatPumpDataParser;
 
 public class Read {
 
@@ -33,26 +33,14 @@ public class Read {
 	private static int baudRate = 9600;
 	private static List<Request> heatPumpConfiguration;
 	private static SerialConnector connection;
-
-	private static final int INPUT_BUFFER_LENGTH = 1024;
+ 
+    private static final int WAIT_MS = 100;
+	private static String serialPortName = "";	
+	private static final int MAXRETRIES = 2;
+	
+	private static final int INPUT_BUFFER_LENGTH = 16;
 	private static byte[] buffer = new byte[INPUT_BUFFER_LENGTH];
-	
-	public static byte ESCAPE = (byte) 0x10;
-	public static byte HEADERSTART = (byte) 0x01;
-	public static byte END = (byte) 0x03;
-	public static byte GET = (byte) 0x00;
-	public static byte SET = (byte) 0x80;
-	public static byte STARTCOMMUNICATION = (byte) 0x02;
-	public static byte[] FOOTER = { ESCAPE, END };
-	public static byte[] DATAAVAILABLE = { ESCAPE, STARTCOMMUNICATION };
-	
-	public static byte VERSIONREQUEST = (byte) 0xfd;
-	public static byte VERSIONCHECKSUM = (byte) 0xfe;
-	public static byte[] REQUESTVERSION = { HEADERSTART,GET,VERSIONCHECKSUM,VERSIONREQUEST,ESCAPE,END };
-	public static byte VALUECHECKSUM = (byte) 0xfc;
-	public static byte VALUEREQUEST = (byte) 0xfb;
-	public static byte[] REQUESTVALUES = { HEADERSTART,GET,VALUECHECKSUM,VALUEREQUEST,ESCAPE,END };
-	
+		
     private static final Logger logger = LoggerFactory.getLogger(SerialConnector.class);
 
 	private static void printUsage() {
@@ -69,12 +57,11 @@ public class Read {
 	}
 
 	public static void main(String[] args) {
+		
 		if (args.length < 1 || args.length > 5) {
 			printUsage();
 			System.exit(1);
 		}
-
-		String serialPortName = "";
 		
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].equals("-b")) {
@@ -102,100 +89,85 @@ public class Read {
 				serialPortName = args[i];
 			}
 		}
-
+		
 		if (!getHeatPumpConfiguration()) {
-			System.err.print("Could not load configuration! Can't find heat pump configuration.");
+			logger.error("Could not load configuration! Can't find heat pump configuration.");
 			System.exit(1);
 		}
 		
-		connection = new SerialConnector();
-		connection.connect(serialPortName);
 		readVersionNew();
-		//readVersion(connection);
-		//readData(connection);
 
-		connection.disconnect();
-		connection = null;
+		System.exit(0);
 		
 	}
 
-	private static void readData(Connection connection) {
-		Map<String, String> heatPumpData = new HashMap<String, String>();
-		
-		Request dataRequest = null;
+	private static void readVersionNew() {
+		Request versionRequest = null;
 
 		for (Request request : heatPumpConfiguration) {
-			System.out.println(
-					"Request : Name -> " + request.getName() +
-					" | Description -> " + request.getDescription() +
-					" Requestbyte -> " + 
-					DatatypeConverter.printHexBinary(new byte[] { request.getRequestByte() }));
-			dataRequest = request;
-			System.out.println("Loaded Request : " + dataRequest.getDescription());
-		}
-
-		try {
-			connection.connect();
-			connection.startCommunication();
-			heatPumpData = connection.readCurrentValues(dataRequest);
-			for (Map.Entry<String, String> entry : heatPumpData.entrySet()) {
-				System.out.println("Name : " + entry.getKey() + " Value : "
-					+ entry.getValue());
+			logger.debug(
+					"Request : Name -> {}, Description -> {} , RequestByte -> {}",
+					request.getName(), request.getDescription(),
+					DatatypeConverter.printHexBinary(new byte[] { request
+							.getRequestByte() }));
+			if (request.getName().equalsIgnoreCase("Version")) {
+				versionRequest = request;
+				logger.debug("Loaded Request : "
+						+ versionRequest.getDescription());
 			}
-
-		} catch (IOException e) {
-			System.err.println("IOException while trying to read: " + e.getMessage());
-			connection.disconnect();
-			System.exit(1);
-		} catch (TimeoutException e) {
-			System.err.print("Read attempt timed out");
-			connection.disconnect();
-			System.exit(1);
-		}finally{
-			connection.disconnect();
 		}
-	}
 
-	private static void readVersion(Connection connection) {
+		connection = new SerialConnector();
+		connection.connect(serialPortName);
+
 		String version = "";
-		try {
-			connection.connect();
-			version = connection.readVersion();
-		} catch (IOException e) {
-			System.err.println("IOException while trying to read: " + e.getMessage());
-			connection.disconnect();
-			System.exit(1);
-		} catch (TimeoutException e) {
-			System.err.print("Read attempt timed out");
-			connection.disconnect();
-			System.exit(1);
-		}finally{
-			connection.disconnect();
-		}
+
+		connection.write(StiebelHeatPumpDataParser.STARTCOMMUNICATION);
+		logger.debug("Sending start communication");
 		
-		// print identification string
-		System.out.println("Version of firmware is :  " + version);
-	}
-	
-	private static void readVersionNew() {
-		String version = "";
-
-		connection.write(REQUESTVERSION);
-		connection.get(buffer);
-		if(buffer[1] != STARTCOMMUNICATION){
-			logger.info("No data available message...!");
+		byte response;
+		try {
+			response = connection.get();
+		} catch (Exception e) {
+			logger.error("heat pump communication could not be established !");
 			return;
 		}
 		
-		connection.write(ESCAPE);
-		connection.get(buffer);
+		if(response != StiebelHeatPumpDataParser.ESCAPE){
+			logger.warn("heat pump is communicating, but did not received Escape message in inital handshake!");
+			return;
+		}
 		
+		StiebelHeatPumpDataParser parser = new StiebelHeatPumpDataParser();
+		Map<String, String> data = new HashMap<String, String>();
+		// prepare request message 
+		short checkSum;
+		try {
+			checkSum = parser.calculateChecksum(
+					new byte[] { versionRequest.getRequestByte()});
+			byte[] requestMessage = { 
+					StiebelHeatPumpDataParser.HEADERSTART,
+					StiebelHeatPumpDataParser.GET,
+					parser.shortToByte(checkSum)[0], 
+					versionRequest.getRequestByte(),
+					StiebelHeatPumpDataParser.ESCAPE,
+					StiebelHeatPumpDataParser.END };
+
+			byte[] responseAvailable =  getData(requestMessage);
+			
+		} catch (StiebelHeatPumpException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		
 		// print identification string
-		System.out.println("Version of firmware is :  " + version);
+		logger.info("Version of firmware is : {}" , version);
+		
+		connection.disconnect();
+		connection = null;
+
 	}
 
-	
 	/**
 	 * This method looks up all files in resource and List of Request objects
 	 * into xml file
@@ -208,12 +180,85 @@ public class Read {
 		heatPumpConfiguration = configLocator.getConfig();
 
 		if (heatPumpConfiguration != null && !heatPumpConfiguration.isEmpty()) {
-			System.out.println("Loaded heat pump configuration " + configFile);
-			System.out.println("Configuration file contains " + heatPumpConfiguration.size() + " requests.");
+			logger.info("Loaded heat pump configuration {} ", configFile);
+			logger.info("Configuration file contains {} requests.",  heatPumpConfiguration.size());
 			return true;
 		}
-		System.err.print("Could not load heat pump configuration file for " + configFile);
+		logger.error("Could not load heat pump configuration file {} ", configFile);
 		return false;
 	}
 
+    private static byte[] getData(byte[] request) {
+    	
+    	buffer = new byte[INPUT_BUFFER_LENGTH];
+    	byte singleByte ;
+    	int retry = 0;
+		int numBytesReadTotal = 0;
+		boolean dataAvailable = false;
+
+		connection.write(request);
+		
+    	while (!dataAvailable & retry < MAXRETRIES ) {	
+    		try {
+				singleByte = connection.get();
+			} catch (Exception e) {
+				// reconnect and try again to send request
+				//connection.disconnect();
+				//connection.connect(serialPortName,baudRate);
+				//connection.write(request);
+				
+				retry++;
+				continue;
+			}
+			
+    		buffer[numBytesReadTotal] = singleByte;
+			numBytesReadTotal ++;
+    		
+			if (buffer[0] == StiebelHeatPumpDataParser.DATAAVAILABLE[0] &&
+					buffer[1] == StiebelHeatPumpDataParser.DATAAVAILABLE[1]){				
+				// found response from heat pump that data are available
+				dataAvailable = true;
+				break;
+			}
+    	}   	
+    	
+    	if(!dataAvailable){
+    		logger.warn("heat pump has no data available for request!");
+    		return new byte[]{};
+    	}
+    	
+    	// Acknowledge sending data
+    	connection.write(StiebelHeatPumpDataParser.ESCAPE);
+    	
+    	// receive data
+    	buffer = new byte[INPUT_BUFFER_LENGTH];
+    	retry = 0;
+		numBytesReadTotal = 0;
+    	boolean endOfMessage = false;
+    	 
+		while (!endOfMessage & retry < MAXRETRIES) {		
+    		try {
+				singleByte = connection.get();
+			} catch (Exception e) {
+				// reconnect and try again to send request
+				retry++;
+				continue;
+			}
+			
+    		buffer[numBytesReadTotal] = singleByte;
+			numBytesReadTotal ++;
+			
+			if (numBytesReadTotal > 4 && 
+				buffer[numBytesReadTotal-2] == StiebelHeatPumpDataParser.ESCAPE && 
+				buffer[numBytesReadTotal-1] == StiebelHeatPumpDataParser.END) {
+				// we have reached the end of the response
+				endOfMessage = true;
+				break;
+			}
+		}
+		
+		byte[] responseBuffer = new byte[numBytesReadTotal];
+		System.arraycopy(buffer, 0, responseBuffer, 0, numBytesReadTotal);
+        return responseBuffer;
+    }
 }
