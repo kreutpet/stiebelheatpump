@@ -12,6 +12,12 @@ import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 
+/**
+ * Record definition class for Stiebel heat pump requests.
+ * 
+ * @author Peter Kreutzer
+ * @since 1.5.0
+ */
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RecordDefinition {
 
@@ -41,7 +47,7 @@ public class RecordDefinition {
 	private int max;
 
 	@XmlAttribute(required = false)
-	private int step;
+	private double step;
 	
 	@XmlAttribute(required = false)
 	private String unit;
@@ -52,24 +58,66 @@ public class RecordDefinition {
 	public RecordDefinition() {
 	}
 
-	public RecordDefinition(String name, int position, int lenght, double scale, Type dataType) {
+	/**
+	 *Constructor of record definition
+	 * used for status and sensor values
+	 * @param name of record
+	 * @param position of the value in the byte array
+	 * @param lenght of byte representing the value
+	 * @param scale to apply to the byte value
+	 * @param dataType of the record, see enums 
+	 * @param unit of the value
+	 */
+	public RecordDefinition(String name, int position, int lenght, double scale, Type dataType, String unit) {
 		this.name = name;
 		this.position = position;
 		this.length = lenght;
 		this.scale = scale;
 		this.dataType = dataType;
+		this.unit = unit;
 	}
 	
-	public RecordDefinition(String name, int position, int lenght, double scale, Type dataType, int bitPosition) {
+	/**
+	 *Constructor of record definition
+	 * used for setting programs with week days encoding
+	 * @param name of record
+	 * @param position of the value in the byte array
+	 * @param lenght of byte representing the value
+	 * @param scale to apply to the byte value
+	 * @param dataType of the record, see enums 
+	 * @param min values for a setting
+	 * @param max values for a setting
+	 * @param step in which setting can be changed
+	 * @param bitPosition of the bit in the byte representing the value 
+	 * @param unit of the value
+	 */	
+	public RecordDefinition(String name, int position, int lenght, double scale, Type dataType, int min, int max, double step, int bitPosition, String unit) {
 		this.name = name;
 		this.position = position;
 		this.length = lenght;
 		this.scale = scale;
 		this.dataType = dataType;
+		this.min = min;
+		this.max = max;
+		this.step = step;
 		this.bitPosition = bitPosition;
+		this.unit = unit;
 		}	
 	
-	public RecordDefinition(String name, int position, int lenght, double scale, Type dataType, int min, int max, int step, String unit) {
+	/**
+	 *Constructor of record definition
+	 * used for settings that can be changed
+	 * @param name of record
+	 * @param position of the value in the byte array
+	 * @param lenght of byte representing the value
+	 * @param scale to apply to the byte value
+	 * @param dataType of the record, see enums 
+	 * @param min values for a setting
+	 * @param max values for a setting
+	 * @param step in which setting can be changed
+	 * @param unit of the value
+	 */
+	public RecordDefinition(String name, int position, int lenght, double scale, Type dataType, int min, int max, double step, String unit) {
 		this.name = name;
 		this.position = position;
 		this.length = lenght;
@@ -137,7 +185,7 @@ public class RecordDefinition {
 		this.max = max;
 	}
 
-	public int getStep() {
+	public double getStep() {
 		return step;
 	}
 

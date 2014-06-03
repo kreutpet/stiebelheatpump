@@ -9,13 +9,10 @@ package org.stiebelheatpump;
  * http://www.eclipse.org/legal/epl-v10.html
  */
 
-import java.io.IOException;
-import java.nio.Buffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.TimeoutException;
 
 import javax.xml.bind.DatatypeConverter;
 
@@ -156,9 +153,9 @@ public class Read {
 					StiebelHeatPumpDataParser.END };	
 			try {
 				// prepare request message	
-				checkSum = parser.calculateChecksum(new byte[] { request
-						.getRequestByte() });
+				checkSum = parser.calculateChecksum(requestMessage);
 				requestMessage[2] = parser.shortToByte(checkSum)[0];
+				requestMessage = parser.addDuplicatedBytes(requestMessage);
 			} catch (StiebelHeatPumpException e) {				
 			}
 			

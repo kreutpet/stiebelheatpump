@@ -56,12 +56,12 @@ public class SerialConnector implements ProtocolConnector {
 			byteStreamPipe = new ByteStreamPipe(in, buffer);
 			new Thread(byteStreamPipe).start();
 
-			// Runtime.getRuntime().addShutdownHook(new Thread() {
-			// @Override
-			// public void run() {
-			// disconnect();
-			// }
-			// });
+			 Runtime.getRuntime().addShutdownHook(new Thread() {
+			 @Override
+			 public void run() {
+			 disconnect();
+			 }
+			 });
 
 		} catch (Exception e) {
 			throw new RuntimeException("Could not init comm port", e);

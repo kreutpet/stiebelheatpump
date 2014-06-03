@@ -15,6 +15,12 @@ import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 
+/**
+ * Requests class for Stiebel heat pump.
+ * 
+ * @author Peter Kreutzer
+ * @since 1.5.0
+ */
 @XmlRootElement(name = "requests")
 @XmlAccessorType (XmlAccessType.FIELD)
 public class Requests {

@@ -18,6 +18,12 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 
+/**
+ * request class for Stiebel heat pump.
+ * 
+ * @author Peter Kreutzer
+ * @since 1.5.0
+ */
 @XmlRootElement(name = "request")
 @XmlAccessorType (XmlAccessType.FIELD)
 public class Request {
@@ -75,6 +81,4 @@ public class Request {
 	public void setRecordDefinitions(List<RecordDefinition> recordDefinitions) {
 		this.recordDefinitions = recordDefinitions;
 	}
-
-
 }
