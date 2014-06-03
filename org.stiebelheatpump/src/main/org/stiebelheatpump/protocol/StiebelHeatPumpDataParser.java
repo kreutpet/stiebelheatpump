@@ -13,15 +13,32 @@ import java.nio.ByteOrder;
 import java.util.*;
 
 import org.stiebelheatpump.internal.StiebelHeatPumpException;
+import org.stiebelheatpump.protocol.RecordDefinition.Type;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Class for parse data packets from Stiebel heat pumps
  * 
  * @author Peter Kreutzer
  * @param <T>
- * @since 1.4.0
+ * original protocol parser was written by Robert Penz in python
+ * @since 1.5.0
+ * 
+ * Each response has the same structure as request - header (four bytes), optional data and footer:
+ *  Header: 01
+ *  Read/Write: 00 for Read (get) response, 80 for Write (set) response; 
+ *  	in case of error during command exchange device stores error code here; 
+ *  	know error code : 03 = unknown command
+ *  Checksum: ? 1 byte - the same algorithm as for request
+ *  Command: ? 1 byte - should match Request.Command
+ *  Data: ? only when Read, length depends on data type
+ *  Footer: 10 03
  */
 public class StiebelHeatPumpDataParser {
+
+	private static final Logger logger = LoggerFactory
+			.getLogger(StiebelHeatPumpDataParser.class);
 	
 	public static byte ESCAPE = (byte) 0x10;
 	public static byte HEADERSTART = (byte) 0x01;
@@ -31,16 +48,10 @@ public class StiebelHeatPumpDataParser {
 	public static byte STARTCOMMUNICATION = (byte) 0x02;
 	public static byte[] FOOTER = { ESCAPE, END };
 	public static byte[] DATAAVAILABLE = { ESCAPE, STARTCOMMUNICATION };
-	
-	public static byte VERSIONREQUEST = (byte) 0xfd;
-	public static byte VERSIONCHECKSUM = (byte) 0xfe;
-	public static byte[] REQUESTVERSION = { HEADERSTART,GET,VERSIONCHECKSUM,VERSIONREQUEST,ESCAPE,END };
-	
+
 	final protected static char[] hexArray = "0123456789ABCDEF".toCharArray();
 	
 	public List<Request> parserConfiguration = new ArrayList<Request>();
-
-	public String version = "";
 
 	public StiebelHeatPumpDataParser() {
 	}
@@ -59,9 +70,24 @@ public class StiebelHeatPumpDataParser {
 
 		Map<String, String> map = new HashMap<String, String>();
 
+		logger.debug("Parse bytes: {}",
+				StiebelHeatPumpDataParser.bytesToHex(response));
+		
+		if(response.length<2)
+		{
+			logger.error("response does not have a valid length ogf bytes: {}",
+					StiebelHeatPumpDataParser.bytesToHex(response));
+			return map;
+		}
+		
 		// parse response and fill map
 		for (RecordDefinition recordDefinition : request.getRecordDefinitions()) {
 			String value = parseRecord(response, recordDefinition);
+			logger.debug("Parsed value {} -> {} with pos: {} , len: {}", 
+					recordDefinition.getName(),
+					value,
+					recordDefinition.getPosition(),
+					recordDefinition.getLength());
 			map.put(recordDefinition.getName(), value);
 		}
 		return map;
@@ -78,20 +104,26 @@ public class StiebelHeatPumpDataParser {
 	 */
 	public String parseRecord(byte[] response, RecordDefinition recordDefinition) {
 
+		if(response.length<2)
+		{
+			logger.error("response does not have a valid length ogf bytes: {}",
+					StiebelHeatPumpDataParser.bytesToHex(response));
+			return "";
+		}
 		ByteBuffer buffer = ByteBuffer.wrap(response);
-		short myNumber = 0;
+		short number = 0;
 		byte[] bytes = null;
-		
+				
 		switch (recordDefinition.getLength()) {
 		case 1:
 			bytes = new byte[1];
 			System.arraycopy(response, recordDefinition.getPosition(), bytes, 0, 1);
-			myNumber = Byte.valueOf(buffer.get(recordDefinition.getPosition()));
+			number = Byte.valueOf(buffer.get(recordDefinition.getPosition()));
 			break;
 		case 2:
 			bytes = new byte[2];
 			System.arraycopy(response, recordDefinition.getPosition(), bytes, 0, 2);
-			myNumber = (short) buffer.getShort(recordDefinition.getPosition());
+			number = (short) buffer.getShort(recordDefinition.getPosition());
 			break;
 		}
 
@@ -101,14 +133,81 @@ public class StiebelHeatPumpDataParser {
 			return String.valueOf(returnValue);
 		}
 
-		if (recordDefinition.getScale() < 1.0) {
-			double myDoubleNumber = myNumber * recordDefinition.getScale();
+		if (recordDefinition.getScale() != 1.0) {
+			double myDoubleNumber = number * recordDefinition.getScale();
 			myDoubleNumber = Math.round(myDoubleNumber * 100.0) / 100.0;
 			String returnString = String.format("%s", myDoubleNumber);
 			return returnString;
 		}
 
-		return String.valueOf(myNumber);
+		return String.valueOf(number);
+	}
+
+	/**
+	 * composes the new value of a record definition into a updated set command that can be send back to heat pump
+	 * 
+	 * @param response 
+	 *            of heat pump that should be updated with new value
+	 * @param RecordDefinition
+	 *            that shall be used for compose the new value into the heat pump set command
+	 * @param string value to be compose
+	 * @return byte[] ready to send to heat pump
+	 * @throws StiebelHeatPumpException 
+	 */
+	public byte [] composeRecord(String value, byte[] response, RecordDefinition recordDefinition) throws StiebelHeatPumpException {
+		short newValue = 0;
+		
+		if(recordDefinition.getDataType() != Type.Settings){
+			logger.warn("The record {} can not be set as it is not a setable value!", 
+					recordDefinition.getName());
+			throw new StiebelHeatPumpException("record is not a setting!") ;
+		}
+		
+		double number = Double.parseDouble(value);
+
+		if(number > recordDefinition.getMax() || number < recordDefinition.getMin()){
+			logger.warn("The record {} can not be set to value {} as allowed range is {}<-->{} !", 
+					recordDefinition.getName(),
+					value,
+					recordDefinition.getMax(),
+					recordDefinition.getMin());
+			throw new StiebelHeatPumpException("invalid value !") ;
+		}
+		
+		// change response byte to setting command
+		response[1] = SET;
+
+		// reverse the scale
+		if (recordDefinition.getScale() != 1.0) {
+			number = number / recordDefinition.getScale();
+			newValue = (short)number;
+		}
+
+		// set new bit values in a byte
+		if (recordDefinition.getBitPosition() > 0) {
+			
+			byte[] abyte = new byte[]{response[recordDefinition.getPosition()]};			
+			abyte = setBit(abyte,recordDefinition.getBitPosition(), Integer.parseInt(value));
+			response[recordDefinition.getPosition()] = abyte[0];
+			return response;
+		}
+		
+		// create byte values for single and double byte values
+		// and update response
+		switch (recordDefinition.getLength()) {
+		case 1:
+			byte newByteVlaue = (byte)number;
+			response[recordDefinition.getPosition()] = newByteVlaue;
+			break;
+		case 2:
+			byte[] newByteValues = shortToByte(newValue);
+			System.arraycopy(newByteValues,0,response,recordDefinition.getPosition(), 2);
+			break;
+		}
+
+		response[2] = this.calculateChecksum(response);
+		response = this.addDuplicatedBytes(response);
+		return response;
 	}
 
 	/**
@@ -162,7 +261,7 @@ public class StiebelHeatPumpDataParser {
 
 		if (response[1] != GET & response[1] != SET) {
 			throw new StiebelHeatPumpException(
-					"invalid response on request of data, response is wether get nor set: "
+					"invalid response on request of data, response is neither get nor set: "
 							+ new String(response));
 		}
 
@@ -171,6 +270,23 @@ public class StiebelHeatPumpDataParser {
 					"invalid checksum on request of data "
 							+ new String(response));
 		}
+	}
+	
+	/**
+	 * verifies the header of the heat pump response
+	 * 
+	 * @param response
+	 *            of heat pump
+	 * @return true if header is valid
+	 */
+	public boolean headerCheck(byte[] response){
+		try{
+			verifyHeader(response);
+		}catch (StiebelHeatPumpException e){
+			return false;
+		}
+		
+		return true;
 	}
 
 	/**
@@ -186,37 +302,48 @@ public class StiebelHeatPumpDataParser {
 	public byte calculateChecksum(byte[] data)
 			throws StiebelHeatPumpException {
 		
-		byte[] dataWithoutHeaderFooter = data;
-		if (data.length>4){
-			dataWithoutHeaderFooter = Arrays.copyOfRange(data, 3,
-					data.length - 2);
+		if(data.length<5){
+			throw new StiebelHeatPumpException("no valid byte[] for calulation of checksum!");
 		}
 		
-		short checkSum = 1, i = 0;
-		for (i = 0; i < dataWithoutHeaderFooter.length; i++) {
-			checkSum += (short) (dataWithoutHeaderFooter[i] & 0xFF);
+		// clean existing checksum before calculation
+		data[2] = (byte)0x00;
+		
+		int checkSum = 0, i = 0;
+		for (i = 0; i < data.length-2; i++) {
+			checkSum += (short) (data[i] & 0xFF);
 		}
 
-		return shortToByte(checkSum)[0];
+		return shortToByte((short)checkSum)[0];
 	}
 
 	/**
-	 * converts short to byte
+	 * converts short to byte[]
 	 * 
 	 * @return array of bytes
 	 */
-	public byte[] shortToByte(short value) throws StiebelHeatPumpException {
+	public byte[] shortToByte(short value) {
 		byte[] returnByteArray = new byte[2];
 		returnByteArray[0] = (byte) (value & 0xff);
 		returnByteArray[1] = (byte) ((value >> 8) & 0xff);
 
 		return returnByteArray;
 	}
-
+	
 	/**
-	 * converts short to byte
+	 * converts integer to byte[]
 	 * 
 	 * @return array of bytes
+	 */
+	public byte[] intToByte(int checkSum) {
+		byte[] returnByteArray = ByteBuffer.allocate(4).putInt(checkSum).array();
+		return returnByteArray;
+	}
+
+	/**
+	 * converts byte to short
+	 * 
+	 * @return short
 	 */
 	private short byteToShort(byte[] bytes) throws StiebelHeatPumpException {
 		return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getShort();
@@ -225,7 +352,9 @@ public class StiebelHeatPumpDataParser {
 	/**
 	 * Search the data byte array for the first occurrence of the byte array
 	 * pattern.
-	 * 
+	 * raw data received from device have to be de-escaped before header evaluation and data use:
+  	 * - each sequece 2B 18 must be replaced with single byte 2B
+  	 * - each sequece 10 10 must be replaced with single byte 10
 	 * @param data
 	 *            as byte array representing response from heat pump
 	 *            which shall be fixed
@@ -246,6 +375,48 @@ public class StiebelHeatPumpDataParser {
 	/**
 	 * Search the data byte array for the first occurrence of the byte array
 	 * pattern.
+	 * raw data received from device have to be de-escaped before header evaluation and data use:
+  	 * - each sequece 2B must be replaced with single byte 2B 18
+  	 * - each sequece 10 must be replaced with single byte 10 10
+	 * @param data
+	 *            as byte array representing response from heat pump
+	 *            which shall be fixed
+	 * @return byte array with fixed byte entries
+	 */
+	public byte[] addDuplicatedBytes(byte[] data) {
+		ByteBuffer byteBuffer = ByteBuffer.allocate(data.length * 2);
+
+		// add header without changes
+		for (int i = 0; i < 2; i++) {
+			byteBuffer.put(data[i]);
+		}
+
+		// add now duplicates
+		for (int i = 2; i < data.length-2; i++) {
+			byteBuffer.put(data[i]);
+			if (data[i] == (byte) 0x10) {
+				byteBuffer.put(data[i]);
+			}
+			if (data[i] == (byte) 0x2b) {
+				byteBuffer.put((byte) 0x18);
+			}
+		}
+
+		// add footer without changes
+		for (int i = data.length-2; i < data.length; i++) {
+			byteBuffer.put(data[i]);
+		}
+		
+		byte[] newdata = new byte[byteBuffer.position()];
+		byteBuffer.rewind();
+		byteBuffer.get(newdata);
+
+		return newdata;
+	}
+
+	/**
+	 * Search the data byte array for the first occurrence of the byte array
+	 * pattern.
 	 * 
 	 * @param data
 	 *            as byte array to search into and to replace the pattern bytes
@@ -261,7 +432,6 @@ public class StiebelHeatPumpDataParser {
 
 		int position = indexOf(data, pattern);
 		while (position >= 0) {
-
 			byte[] newData = new byte[data.length - pattern.length
 					+ replace.length];
 			System.arraycopy(data, 0, newData, 0, position);
@@ -324,6 +494,9 @@ public class StiebelHeatPumpDataParser {
 	/**
 	 * Gets one bit back from a bit string stored in a byte array at the
 	 * specified position.
+	 * @param data, byte array to pick short value from
+	 * @param position to get the bit value
+	 * @return integer value 1 or 0 that represents the bit
 	 */
 	private int getBit(byte[] data, int pos) {
 		int posByte = pos / 8;
@@ -336,23 +509,45 @@ public class StiebelHeatPumpDataParser {
 	/**
 	 * Sets one bit to a bit string at the specified position with the specified
 	 * bit value.
+	 * @param data, byte array to pick short value from
+	 * @param position to set the bit
+	 * @param value to set the bit to (0 or 1)
 	 */
-	private void setBit(byte[] data, int pos, int val) {
-		int posByte = pos / 8;
-		int posBit = pos % 8;
+	private byte[] setBit(byte[] data, int position, int value) {
+		int posByte = position / 8;
+		int posBit = position % 8;
 		byte oldByte = data[posByte];
 		oldByte = (byte) (((0xFF7F >> posBit) & oldByte) & 0x00FF);
-		byte newByte = (byte) ((val << (8 - (posBit + 1))) | oldByte);
+		byte newByte = (byte) ((value << (8 - (posBit + 1))) | oldByte);
 		data[posByte] = newByte;
+		return data;
 	}
 	
+	/**
+	 * Converts a byte array to good readable string.
+	 * @param bytes to be converted
+	 * @return string representing the bytes
+	 */
 	public static String bytesToHex(byte[] bytes) {
-	    char[] hexChars = new char[bytes.length * 3];
+		int dwords = bytes.length / 4 + 1;
+	    char[] hexChars = new char[bytes.length * 3 + dwords*4 ];
+	    int position = 0;
 	    for ( int j = 0; j < bytes.length; j++ ) {
 	        int v = bytes[j] & 0xFF;
-	        hexChars[j * 3] = hexArray[v >>> 4];
-	        hexChars[j * 3 + 1] = hexArray[v & 0x0F];
-	        hexChars[j * 3 + 2] = ' ';
+	        if(j % 4 == 0){
+	        	String str = "(" + String.format("%02d", j) + ")";
+	        	char[] charArray = str.toCharArray();
+	        	for (char character :charArray){
+	        		hexChars[position] = character;
+	        		position++;
+	        	}
+	        }
+	        hexChars[position] = hexArray[v >>> 4];
+	        position++;
+	        hexChars[position] = hexArray[v & 0x0F];
+	        position++;
+	        hexChars[position] = ' ';
+	        position++;
 	    }
 	    return new String(hexChars);
 	}

@@ -14,16 +14,23 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
+import javax.xml.bind.PropertyException;
 import javax.xml.bind.Unmarshaller;
 
 import org.stiebelheatpump.protocol.Request;
 import org.stiebelheatpump.protocol.Requests;
+import org.stiebelheatpump.protocol.SerialConnector;
 
 public class ConfigParser {
+	
+	private static final Logger logger = LoggerFactory
+			.getLogger(ConfigParser.class);
 	
 	public ConfigParser() {
 	}
@@ -35,24 +42,42 @@ public class ConfigParser {
 	 *            object to be saved
 	 * @param xmlFileLocation
 	 *            file object to save the object into
-	 * @throws IOException 
-	 * @throws JAXBException 
 	 */
-	public void marshal(List<Request> requests, File xmlFileLocation) throws IOException, JAXBException {
+	@SuppressWarnings("resource")
+	public void marshal(List<Request> requests, File xmlFileLocation)
+			throws StiebelHeatPumpException {
 		JAXBContext context;
 		BufferedWriter writer = null;
 		try {
 			writer = new BufferedWriter(new FileWriter(xmlFileLocation));
+		} catch (IOException e) {
+			throw new StiebelHeatPumpException(e.toString());
+		}
+		try {
 			context = JAXBContext.newInstance(Requests.class);
-			Marshaller m;
+		} catch (JAXBException e) {
+			throw new StiebelHeatPumpException(e.toString());
+		}
+		Marshaller m;
+		try {
 			m = context.createMarshaller();
+		} catch (JAXBException e) {
+			throw new StiebelHeatPumpException(e.toString());
+		}
+		try {
 			m.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+		} catch (PropertyException e) {
+			throw new StiebelHeatPumpException(e.toString());
+		}
+		try {
 			m.marshal(new Requests(requests), writer);
+		} catch (JAXBException e) {
+			throw new StiebelHeatPumpException(e.toString());
+		}
+		try {
 			writer.close();
 		} catch (IOException e) {
-			throw new IOException(e.getMessage());
-		} catch (JAXBException e) {
-			throw new JAXBException(e.getMessage());
+			throw new StiebelHeatPumpException(e.toString());
 		}
 	}
 
@@ -63,7 +88,8 @@ public class ConfigParser {
 	 *            file object to load the object from
 	 * @return List of Requests
 	 */
-	public List<Request> unmarshal(File importFile) {
+	public List<Request> unmarshal(File importFile)
+			throws StiebelHeatPumpException {
 		Requests requests = new Requests();
 
 		JAXBContext context;
@@ -72,7 +98,7 @@ public class ConfigParser {
 			Unmarshaller um = context.createUnmarshaller();
 			requests = (Requests) um.unmarshal(importFile);
 		} catch (JAXBException e) {
-			throw new RuntimeException(e);
+			new StiebelHeatPumpException(e.toString());
 		}
 
 		return requests.getRequests();
@@ -86,7 +112,8 @@ public class ConfigParser {
 	 * @return List of Requests
 	 */
 	public List<Request> parseConfig(String fileName) {
-		System.out.println("Parsing  heat pump configuration file " + fileName);
+		logger.debug("Parsing  heat pump configuration file {}.",
+				fileName);
         try {
         	JAXBContext context = JAXBContext.newInstance(Requests.class);
             Unmarshaller unmarshaller = context.createUnmarshaller();
@@ -95,7 +122,8 @@ public class ConfigParser {
             List<Request> requests = configuration.getRequests();
             return requests;
         } catch (JAXBException e) {
-        	System.err.println("Parsing  failed " + e.getMessage());
+        	logger.debug("Parsing  failed {}. " + e.toString(),
+    				fileName);
             throw new RuntimeException(e);
         }
     }
