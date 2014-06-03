@@ -174,6 +174,23 @@ public class StiebelHeatPumpDataParser {
 	}
 
 	/**
+	 * verifies the header of the heat pump response
+	 * 
+	 * @param response
+	 *            of heat pump
+	 * @return true if header is valid
+	 */
+	public boolean headerCheck(byte[] response){
+		try{
+			verifyHeader(response);
+		}catch (StiebelHeatPumpException e){
+			return false;
+		}
+		
+		return true;
+	}
+	
+	/**
 	 * calculates the checksum of a byte data array
 	 * 
 	 * @param data
