@@ -1,24 +1,37 @@
+/**
+ * Copyright 2014 
+ * This file is part of stiebel heat pump reader.
+ * It is free software: you can redistribute it and/or modify it under the terms of the 
+ * GNU General Public License as published by the Free Software Foundation, 
+ * either version 3 of the License, or (at your option) any later version.
+ * It is  is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+ * See the GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License along with the project. 
+ * If not, see http://www.gnu.org/licenses/.
+ */
 package org.stiebelheatpump.protocol;
+
+import org.stiebelheatpump.internal.StiebelHeatPumpException;
 
 public interface ProtocolConnector {
 
-	
-    void connect(String device);
-        
-	void disconnect();
+	public abstract void connect(String s, int i)
+			throws StiebelHeatPumpException;
 
-    byte get() throws Exception;
+	public abstract void disconnect();
 
-    short getShort() throws Exception;
+	public abstract byte get() throws Exception;
 
-    void get(byte[] data) throws Exception;
+	public abstract short getShort() throws Exception;
 
-    void mark();
+	public abstract void get(byte abyte0[]) throws Exception;
 
-    void reset();
+	public abstract void mark();
 
-    void write(byte[] data);
+	public abstract void reset();
 
-	void write(byte data);
+	public abstract void write(byte abyte0[]) throws Exception;
 
+	public abstract void write(byte byte0) throws Exception;
 }

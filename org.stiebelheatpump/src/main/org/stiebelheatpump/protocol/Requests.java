@@ -1,11 +1,14 @@
-<<<<<<< HEAD
 /**
- * Copyright (c) 2010-2014, openHAB.org and others.
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * Copyright 2014 
+ * This file is part of stiebel heat pump reader.
+ * It is free software: you can redistribute it and/or modify it under the terms of the 
+ * GNU General Public License as published by the Free Software Foundation, 
+ * either version 3 of the License, or (at your option) any later version.
+ * It is  is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+ * See the GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License along with the project. 
+ * If not, see http://www.gnu.org/licenses/.
  */
 package org.stiebelheatpump.protocol;
 
@@ -20,22 +23,21 @@ import javax.xml.bind.annotation.XmlRootElement;
  * Requests class for Stiebel heat pump.
  * 
  * @author Peter Kreutzer
- * @since 1.5.0
  */
 @XmlRootElement(name = "requests")
-@XmlAccessorType (XmlAccessType.FIELD)
+@XmlAccessorType(XmlAccessType.FIELD)
 public class Requests {
 
 	@XmlElement(name = "request")
 	private List<Request> requests = new ArrayList<Request>();
-	
+
 	public Requests() {
 	}
 
-    public Requests(List<Request> requests) {
-        this.requests = requests;
-    }
-    
+	public Requests(List<Request> requests) {
+		this.requests = requests;
+	}
+
 	public List<Request> getRequests() {
 		return requests;
 	}
@@ -53,69 +55,8 @@ public class Requests {
 		}
 		return r;
 	}
-	
-	public interface Matcher<T> { 
-		  public boolean matches( T t );
-		}
+
+	public interface Matcher<T> {
+		public boolean matches(T t);
+	}
 }
-=======
-/**
- * Copyright (c) 2010-2014, openHAB.org and others.
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
- */
-package org.stiebelheatpump.protocol;
-
-import java.util.ArrayList;
-import java.util.List;
-import javax.xml.bind.annotation.XmlAccessType;
-import javax.xml.bind.annotation.XmlAccessorType;
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
-
-/**
- * Requests class for Stiebel heat pump.
- * 
- * @author Peter Kreutzer
- * @since 1.5.0
- */
-@XmlRootElement(name = "requests")
-@XmlAccessorType (XmlAccessType.FIELD)
-public class Requests {
-
-	@XmlElement(name = "request")
-	private List<Request> requests = new ArrayList<Request>();
-	
-	public Requests() {
-	}
-
-    public Requests(List<Request> requests) {
-        this.requests = requests;
-    }
-    
-	public List<Request> getRequests() {
-		return requests;
-	}
-
-	public void setRequests(List<Request> requests) {
-		this.requests = requests;
-	}
-
-	public static <T> List<T> searchIn(List<T> list, Matcher<T> m) {
-		List<T> r = new ArrayList<T>();
-		for (T t : list) {
-			if (m.matches(t)) {
-				r.add(t);
-			}
-		}
-		return r;
-	}
-	
-	public interface Matcher<T> { 
-		  public boolean matches( T t );
-		}
-}
->>>>>>> 5de0a0bfac691c7fb18a04e3bc4902a810b91df2

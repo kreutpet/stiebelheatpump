@@ -1,3 +1,15 @@
+/**
+ * Copyright 2014 
+ * This file is part of stiebel heat pump reader.
+ * It is free software: you can redistribute it and/or modify it under the terms of the 
+ * GNU General Public License as published by the Free Software Foundation, 
+ * either version 3 of the License, or (at your option) any later version.
+ * It is  is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+ * See the GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License along with the project. 
+ * If not, see http://www.gnu.org/licenses/.
+ */
 package org.stiebelheatpump.protocol;
 
 import gnu.io.CommPort;
@@ -17,8 +29,8 @@ import org.slf4j.LoggerFactory;
 /**
  * connector for serial port communication.
  * 
- * @author Evert van Es
- * @since 1.3.0
+ * @author Evert van Es (originaly copied from)
+ * @author Peter Kreutzer
  */
 public class SerialConnector implements ProtocolConnector {
 
@@ -32,9 +44,7 @@ public class SerialConnector implements ProtocolConnector {
 
 	private CircularByteBuffer buffer;
 
-	public SerialConnector() {
-	}
-
+	@Override
 	public void connect(String device, int baudrate) {
 		try {
 			CommPortIdentifier portIdentifier = CommPortIdentifier
@@ -54,14 +64,14 @@ public class SerialConnector implements ProtocolConnector {
 			buffer = new CircularByteBuffer(Byte.MAX_VALUE * Byte.MAX_VALUE + 2
 					* Byte.MAX_VALUE);
 			byteStreamPipe = new ByteStreamPipe(in, buffer);
-			new Thread(byteStreamPipe).start();
+			byteStreamPipe.startTask();
 
-			 Runtime.getRuntime().addShutdownHook(new Thread() {
-			 @Override
-			 public void run() {
-			 disconnect();
-			 }
-			 });
+			Runtime.getRuntime().addShutdownHook(new Thread() {
+				@Override
+				public void run() {
+					disconnect();
+				}
+			});
 
 		} catch (Exception e) {
 			throw new RuntimeException("Could not init comm port", e);
@@ -69,24 +79,15 @@ public class SerialConnector implements ProtocolConnector {
 	}
 
 	@Override
-	public void connect(String device) {
-		connect(device, 9600);
-	}
-
-	@Override
 	public void disconnect() {
 		logger.debug("Interrupt serial connection");
-		byteStreamPipe.stop();
+		byteStreamPipe.stopTask();
 
 		logger.debug("Close serial stream");
 		try {
 			out.close();
 			serialPort.close();
 			buffer.stop();
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-			}
 		} catch (IOException e) {
 			logger.warn("Could not fully shut down heat pump driver", e);
 		}
@@ -123,7 +124,7 @@ public class SerialConnector implements ProtocolConnector {
 	public void write(byte[] data) {
 		try {
 			logger.debug("Send request message : {}",
-					StiebelHeatPumpDataParser.bytesToHex(data));
+					DataParser.bytesToHex(data));
 			out.write(data);
 			out.flush();
 

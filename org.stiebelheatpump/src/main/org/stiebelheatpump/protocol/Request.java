@@ -1,10 +1,14 @@
 /**
- * Copyright (c) 2010-2014, openHAB.org and others.
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * Copyright 2014 
+ * This file is part of stiebel heat pump reader.
+ * It is free software: you can redistribute it and/or modify it under the terms of the 
+ * GNU General Public License as published by the Free Software Foundation, 
+ * either version 3 of the License, or (at your option) any later version.
+ * It is  is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+ * See the GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License along with the project. 
+ * If not, see http://www.gnu.org/licenses/.
  */
 package org.stiebelheatpump.protocol;
 
@@ -22,28 +26,27 @@ import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
  * request class for Stiebel heat pump.
  * 
  * @author Peter Kreutzer
- * @since 1.5.0
  */
 @XmlRootElement(name = "request")
-@XmlAccessorType (XmlAccessType.FIELD)
+@XmlAccessorType(XmlAccessType.FIELD)
 public class Request {
-	
+
 	@XmlAttribute(required = true)
 	private String name;
-	
+
 	@XmlAttribute(required = true)
 	private String description;
-	
+
 	@XmlJavaTypeAdapter(ByteAdapter.class)
 	@XmlAttribute(required = true)
 	private Byte requestByte;
-	
+
 	@XmlElement(name = "recordDefinition")
 	private List<RecordDefinition> recordDefinitions = new ArrayList<RecordDefinition>();
 
-	public Request() {		
+	public Request() {
 	}
-	
+
 	public Request(String name, String description, byte requestByte) {
 		this.name = name;
 		this.description = description;

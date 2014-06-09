@@ -1,37 +1,38 @@
 /**
- * Copyright (c) 2010-2014, openHAB.org and others.
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * Copyright 2014 
+ * This file is part of stiebel heat pump reader.
+ * It is free software: you can redistribute it and/or modify it under the terms of the 
+ * GNU General Public License as published by the Free Software Foundation, 
+ * either version 3 of the License, or (at your option) any later version.
+ * It is  is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+ * See the GNU General Public License for more details.
+ * You should have received a copy of the GNU General Public License along with the project. 
+ * If not, see http://www.gnu.org/licenses/.
  */
 package org.stiebelheatpump.internal;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.util.List;
+
+import javax.xml.bind.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import javax.xml.bind.PropertyException;
-import javax.xml.bind.Unmarshaller;
-
 import org.stiebelheatpump.protocol.Request;
 import org.stiebelheatpump.protocol.Requests;
-import org.stiebelheatpump.protocol.SerialConnector;
 
+/**
+ * Config parser class. This class parses the xml configuration file converts it
+ * into a list of requests
+ * 
+ * @author Peter Kreutzer
+ */
 public class ConfigParser {
-	
+
 	private static final Logger logger = LoggerFactory
 			.getLogger(ConfigParser.class);
-	
+
 	public ConfigParser() {
 	}
 
@@ -112,19 +113,18 @@ public class ConfigParser {
 	 * @return List of Requests
 	 */
 	public List<Request> parseConfig(String fileName) {
-		logger.debug("Parsing  heat pump configuration file {}.",
-				fileName);
-        try {
-        	JAXBContext context = JAXBContext.newInstance(Requests.class);
-            Unmarshaller unmarshaller = context.createUnmarshaller();
-            InputStream stream = Thread.currentThread().getContextClassLoader().getResourceAsStream(fileName);
-            Requests configuration = (Requests) unmarshaller.unmarshal(stream);
-            List<Request> requests = configuration.getRequests();
-            return requests;
-        } catch (JAXBException e) {
-        	logger.debug("Parsing  failed {}. " + e.toString(),
-    				fileName);
-            throw new RuntimeException(e);
-        }
-    }
+		logger.debug("Parsing  heat pump configuration file {}.", fileName);
+		try {
+			JAXBContext context = JAXBContext.newInstance(Requests.class);
+			Unmarshaller unmarshaller = context.createUnmarshaller();
+			InputStream stream = Thread.currentThread().getContextClassLoader()
+					.getResourceAsStream(fileName);
+			Requests configuration = (Requests) unmarshaller.unmarshal(stream);
+			List<Request> requests = configuration.getRequests();
+			return requests;
+		} catch (JAXBException e) {
+			logger.debug("Parsing  failed {}. " + e.toString(), fileName);
+			throw new RuntimeException(e);
+		}
+	}
 }
