@@ -19,19 +19,19 @@ import org.slf4j.LoggerFactory;
 import org.stiebelheatpump.internal.StiebelCommunicationService;
 import org.stiebelheatpump.internal.StiebelHeatPumpException;
 
-public class Read {
+public class SetDate {
 
 	private static String configFile;
 	private static int baudRate = 9600;
 	private static String serialPortName = "";
-	private static final Logger logger = LoggerFactory.getLogger(Read.class);
+	private static final Logger logger = LoggerFactory.getLogger(SetDate.class);
 
-	public Read() {
+	public SetDate() {
 	}
 
 	private static void printUsage() {
 		System.out
-				.println("SYNOPSIS\n\torg.stiebelheatpump.Read [-b <baud_rate>] -c <config_file> <serial_port>");
+				.println("SYNOPSIS\n\torg.stiebelheatpump.SetDate [-b <baud_rate>] -c <config_file> <serial_port>");
 		System.out
 				.println("DESCRIPTION\n\tReads the heat pump version connected to the given serial port and prints the received data to stdout. "
 						+ "Errors are printed to stderr.");
@@ -76,26 +76,15 @@ public class Read {
 					serialPortName, baudRate, configFile);
 			Map<String, String> data = new HashMap<String, String>();
 
-			String version = communicationService.getversion();
-			logger.info("Heat pump has version {}", version);
-
-			data = communicationService.getSettings();
+			//String version = communicationService.getversion();
+			//logger.info("Heat pump has version {}", version);
+			
+			data = communicationService.setTime();
 			for (Map.Entry<String, String> entry : data.entrySet()) {
 				logger.info("Data {} has value {}", entry.getKey(),
 						entry.getValue());
 			}
 
-			data = communicationService.getStatus();
-			for (Map.Entry<String, String> entry : data.entrySet()) {
-				logger.info("Data {} has value {}", entry.getKey(),
-						entry.getValue());
-			}
-
-			data = communicationService.getSensors();
-			for (Map.Entry<String, String> entry : data.entrySet()) {
-				logger.info("Data {} has value {}", entry.getKey(),
-						entry.getValue());
-			}
 			communicationService.finalizer();
 		} catch (StiebelHeatPumpException e) {
 			logger.error("Error : {}", e.toString());

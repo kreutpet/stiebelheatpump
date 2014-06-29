@@ -29,13 +29,17 @@ import org.slf4j.LoggerFactory;
  *            original protocol parser was written by Robert Penz in python
  * @since 1.5.0
  * 
- *        Each response has the same structure as request - header (four bytes),
- *        optional data and footer: Header: 01 Read/Write: 00 for Read (get)
- *        response, 80 for Write (set) response; in case of error during command
- *        exchange device stores error code here; know error code : 03 = unknown
- *        command Checksum: ? 1 byte - the same algorithm as for request
- *        Command: ? 1 byte - should match Request.Command Data: ? only when
- *        Read, length depends on data type Footer: 10 03
+ * Each response has the same structure as request
+ * header (four bytes), optional data and footer:
+ * 
+ *  Header: 01
+ *  Read/Write: 00 for Read (get) response, 80 for Write (set) response; 
+ *  	in case of error during command exchange device stores error code here; 
+ *  	know error code : 03 = unknown command
+ *  Checksum: ? 1 byte - the same algorithm as for request
+ *  Command: ? 1 byte - should match Request.Command
+ *  Data: ? only when Read, length depends on data type
+ *  Footer: 10 03
  */
 public class DataParser {
 
@@ -214,6 +218,9 @@ public class DataParser {
 
 		response[2] = this.calculateChecksum(response);
 		response = this.addDuplicatedBytes(response);
+		logger.debug(
+				"Updated record {} at position {} to value {}.",
+				recordDefinition.getName(), recordDefinition.getPosition() ,value);
 		return response;
 	}
 
